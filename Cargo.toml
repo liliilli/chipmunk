@@ -1,0 +1,11 @@
+[package]
+name = "sh_chip8"
+version = "0.1.0"
+authors = ["Jongmin Yun <jmyundev@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+pancurses = "0.16.1"
+rand = "0.7.3"

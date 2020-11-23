@@ -1,0 +1,25 @@
+[build]
+jobs = 8
+
+[profile.dev]
+opt-level = 0
+debug = true
+debug-assertions = true
+lto = false
+panic = 'unwind'
+incremental = true
+codegen-units = 16
+rpath = false
+
+[profile.release]
+opt-level = 3
+debug = false
+debug-assertions = false 
+lto = true
+panic = 'abort'
+incremental = true
+codegen-units = 256
+rpath = false
+
+[alias]
+run_test = ["run", "./roms/demos/Maze (alt) [David Winter, 199x].ch8"]
