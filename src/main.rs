@@ -24,13 +24,6 @@ fn is_file_valid_ch8(path: &str) -> bool {
         return false;
     } 
 
-    // Check file length is a multiply of 2 bytes.
-    // Every Chip-8 instruction has 2 bytes.
-    match fs::metadata(path) {
-        Ok(metadata) if (metadata.len() as usize % mem::size_of::<u16>()) == 0 => (),
-        _ => return false,
-    }
-
     // Read file and check validation.
     let file = {
         if let Ok(file) = fs::File::open(path) {
