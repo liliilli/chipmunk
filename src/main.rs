@@ -11,7 +11,7 @@ use engine::memory::{Memory};
 use engine::screen::{Screen, DrawMessage, PixelState};
 
 extern crate pancurses;
-use pancurses::{initscr, endwin, Input, noecho, resize_term};
+use pancurses::{initscr, endwin, Input, noecho, resize_term, beep};
 
 static FULL_BLOCK_CHAR: u16 = 0x2588;
 
@@ -95,12 +95,11 @@ fn main() {
 
     // Construct memory (4KiB)
     // Verbose? Check memory state.
-    let memory = Memory::new(&file_path).unwrap();
+    let mut memory = Memory::new(&file_path).unwrap();
     //memory.print_memory_dump();
 
     // Set registers
     let mut registers = Registers::new();
-    println!("Registers\n{}", registers);
 
     // Set screen buffer
     let mut screen = Screen::new();
@@ -125,32 +124,52 @@ fn main() {
         }
 
         // Update 
-        let now_pc = registers.get_pc();
-        if let Some(inst) = memory.parse_instruction(now_pc) {
+        if let Some(instruction) = memory.parse_instruction(registers.get_pc()) {
             use engine::register::SideEffect;
-            // Execute instruction
-            // Update register (just updating) and consequential side effects.
-            match registers.update_registers(inst) {
-            Some(SideEffect::ClearDisplay) => {
-                screen.clear();
-                window.clear();
-            },
-            Some(SideEffect::Draw{ pos, n, l: addr }) => {
-                let bytes = memory.get_data_bytes(addr as usize, n as usize);
-                let dirty_pixels = screen.draw(pos, &bytes);
-                for DrawMessage { pos: (x, y), state } in &dirty_pixels {
-                    window.mv(*y as i32, *x as i32);
-                    match state {
-                        PixelState::Erased => { window.delch(); () },
-                        PixelState::Drawn => { window.printw(&block_str); () },
+
+            // Update register with instruction.
+            let side_effect = registers.update_registers(instruction);
+
+            // Process consequential side effects.
+            match side_effect {
+                Some(SideEffect::ClearDisplay) => {
+                    screen.clear();
+                    window.clear();
+                },
+                Some(SideEffect::Draw{ pos, n, l: addr }) => {
+                    // Update screen buffer and get dirty pixels to update window buffer.
+                    // New carry flag value will be returned.
+                    let (dirty_pixels, is_any_erased) = screen.draw(
+                        pos, 
+                        &memory.get_data_bytes(addr as usize, n as usize)
+                    );
+
+                    // Update VF (carry & borrow flag)
+                    registers.update_vf(is_any_erased);
+
+                    // Update window buffer.
+                    for DrawMessage { pos: (x, y), state } in &dirty_pixels {
+                        window.mv(*y as i32, *x as i32);
+                        match state {
+                            PixelState::Erased => { window.delch(); () },
+                            PixelState::Drawn => { window.printw(&block_str); () },
+                        }
                     }
-                }
-            }   
-            _ => (),
+                },
+                Some(SideEffect::MemDump{ dump_vals, l }) => {
+                    // 
+                    memory.store_from(&dump_vals, l);
+                },
+                Some(SideEffect::MemRead{ count, l }) => {
+                    // First, get values from memory [l, l + count)
+                    // Second, store from v0 to v0 + (count - 1).
+                    registers.store_from_v0(&memory.get_data_bytes(l as usize, count as usize));
+                },
+                _ => (),
             }
-            //println!("{}", registers);
         } else { 
             // Failure. Abort program.
+            println!("Register dump : {}", registers);
             break;
         }
     }

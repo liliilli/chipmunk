@@ -2,6 +2,7 @@
 pub const SCREEN_WIDTH: usize = 64;
 pub const SCREEN_HEIGHT: usize = 32;
 
+#[derive(PartialEq)]
 pub enum PixelState {
     Drawn,
     Erased,
@@ -34,14 +35,17 @@ impl Screen {
         }
     }
 
-    pub fn draw(&mut self, (mut x, mut y): (u8, u8), bytes: &[u8]) -> Vec<DrawMessage> {
+    pub fn draw(&mut self, (mut x, mut y): (u8, u8), bytes: &[u8]) -> (Vec<DrawMessage>, bool) {
         let mut result = Vec::<DrawMessage>::new();
+        let mut is_any_erased = false;
 
         let origx = x;
         for byte in bytes {
             for i in (0..8).rev() {
                 if byte & (0b01 << i) != 0x00 { // XORDraw flag
                     let state = self.draw_xor((x, y));
+                    is_any_erased |= state == PixelState::Erased;
+
                     result.push(DrawMessage{pos: (x, y), state});
                 } 
 
@@ -52,7 +56,7 @@ impl Screen {
             y = (y + 1) % (SCREEN_HEIGHT as u8);
         }
 
-        result
+        (result, is_any_erased)
     }
 
     pub fn clear(&mut self) {

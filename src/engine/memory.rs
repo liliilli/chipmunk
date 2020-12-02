@@ -87,8 +87,16 @@ impl Memory {
         self.memory.iter()
             .skip(addr)
             .take(count)
-            .map(|x| *x)
+            .map(|&x| x)
             .collect()
+    }
+
+    pub fn store_from(&mut self, dump_vals: &[u8], mut l: u16 ) {
+        for &val in dump_vals {
+            assert!(l < (4 << 10));
+            self.memory[l as usize] = val;
+            l += 1;
+        }
     }
 }
 

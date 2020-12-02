@@ -22,4 +22,4 @@ codegen-units = 256
 rpath = false
 
 [alias]
-run_test = ["run", "./roms/demos/Maze (alt) [David Winter, 199x].ch8"]
+run_test = ["run", "./roms/demos/Sierpinski [Sergey Naydenov, 2010].ch8"]

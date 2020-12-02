@@ -9,47 +9,87 @@ pub enum Instruction {
     CallSub(u16),                   // 0x2nnn CALL addr Call subroutine of nnn with push now ps.
     SkipEq{ r: u8, val: u8 },       // 0x3xkk SE Vx, byte Skip next instruction if Vx == kk.
     SkipNeq{ r: u8, val: u8 },      // 0x4xkk SNE Vx, byte Skip next instruction if Vx != kk.
+    SkipRegEq{ r: u8, f: u8 },      // 0x5xy0 SE Vx, Vy. Skip next instruction if Vx == Vy.
     SetByte{ r: u8, val: u8 },      // 0x6xkk LD Vx as r, byte(0xkk) as val
     AddByte{ r: u8, val: u8 },      // 0x7xkk ADD Vx, byte(0xkk) as val, Vx += val
     SetRegV{ r: u8, f: u8 },        // 0x8xy0 LD Vx, Vy Set Vx = Vy.
+    OrRegV{ r: u8, f: u8 },         // 0x8xy1 OR Vx, Vy Set Vx |= Vy.
+    AndRegV{ r: u8, f: u8 },        // 0x8xy2 AND Vx, Vy Set Vx &= Vy.
+    XorRegV{ r: u8, f: u8 },        // 0x8xy3 XOR Vx, Vy Set Vx ^= Vy.
+    AddRegV{ r: u8, f: u8 },        // 0x8xy4 ADD Vx, Vy and VF = true if overflow.
+    SubRegV{ r: u8, f: u8 },        // 0x8xy5 SUB Vx, Vy and if Vx > Vy, VF = true.
+    ShrRegV{ r: u8 },               // 0x8x_6 SHR Vx, {_} If LSB of Vx is 1, VF = true, Vx /= 2.
+    SubNRegV{ r: u8, f: u8 },       // 0x8xy7 SUBN Vx, Vy , Vx = Vy - Vx and if Vy > Vx, VF = true.
+    ShlRegV{ r: u8 },               // 0x8x_E SHL Vx = Vx SHL 1 and MSB is 1, VF = true, Vx *= 2.
+    SkipRegNeq{ r: u8, f: u8 },     // 0x9xy0 SNE Vx, Vy
     SetRegL(u16),                   // 0xAnnn LD l, addr(nnn)
+    JmpAddrOffReg0(u16),            // 0xBnnn JP V0, addr(nnn), PC = V0 + nnn.
     RndAnd{ r: u8, val: u8 },       // 0xCxkk RND Vx as r, byte(0xkk) random byte AND kk as val.
     DispSpr{ rp: (u8, u8), n: u8 }, // 0xDxyn DRW Vx, Vy, n-byte sprite with xor from l with xor.
+    AddRegL{ r: u8 },               // 0xFx1E ADD l, Vx. l += Vx.
+    MemDump{ endr: u8 },            // 0xFx55 LD [l], Vx. Store [V0, Vx] value from [l, l+(x-0)].
+    MemRead{ endr: u8 },            // 0xFx65 LD Vx, [l]. Read value from [l, l+(x-0)] to [V0, Vx].
+}
+
+fn get_12bit_from(bytes: &[u8; 2]) -> u16 {
+    (((bytes[0] & 0x0F) as u16) << 8) + bytes[1] as u16
 }
 
 pub fn parse_instruction(bytes: &[u8; 2]) -> Option<Instruction> {
-    let opr0 = bytes[0] >> 4;
-    let r= bytes[0] & 0x0F;
-    let val = bytes[1];
+    let opr0 = bytes[0] >> 4;   // Get 0xXX00____ from bytes
+    let r = bytes[0] & 0x0F;    // Get 0x__XX____ from bytes
+    let val = bytes[1];         // Get 0x____XXXX from bytes
 
     match opr0 {
-        0x00 => {
+        0x0 => {
             match r {
                 0 if bytes[1] == 0xE0 => Some(Instruction::ClearDisplay),
                 0 if bytes[1] == 0xEE => Some(Instruction::ReturnSubroutine),
                 _ => Some(Instruction::Ignore),
             }
         },
-        0x01 => Some(Instruction::JmpAddr(((r as u16) << 8) + bytes[1] as u16)),
-        0x02 => Some(Instruction::CallSub(((r as u16) << 8) + bytes[1] as u16)),
-        0x03 => Some(Instruction::SkipEq{ r, val }),
-        0x04 => Some(Instruction::SkipNeq{ r, val }),
-        0x06 => Some(Instruction::SetByte{ r, val }),
-        0x07 => Some(Instruction::AddByte{ r, val }),
-        0x08 => {
+        0x1 => Some(Instruction::JmpAddr(get_12bit_from(bytes))),
+        0x2 => Some(Instruction::CallSub(get_12bit_from(bytes))),
+        0x3 => Some(Instruction::SkipEq{ r, val }),
+        0x4 => Some(Instruction::SkipNeq{ r, val }),
+        0x5 => Some(Instruction::SkipRegEq{ r, f: bytes[1] >> 4 }),
+        0x6 => Some(Instruction::SetByte{ r, val }),
+        0x7 => Some(Instruction::AddByte{ r, val }),
+        0x8 => {
             let f = bytes[1] >> 4;
             match bytes[1] & 0x0F {
-                0 => Some(Instruction::SetRegV{ r, f }),
-                _ => None, // @todo implement 1,2,3,4,5,6,7,8,9...
+                0x0 => Some(Instruction::SetRegV{ r, f }),
+                0x1 => Some(Instruction::OrRegV{ r, f }),
+                0x2 => Some(Instruction::AndRegV{ r, f }),
+                0x3 => Some(Instruction::XorRegV{ r, f }),
+                0x4 => Some(Instruction::AddRegV{ r, f }),  // Carryable
+                0x5 => Some(Instruction::SubRegV{ r, f }),  // Borrowable
+                0x6 => Some(Instruction::ShrRegV{ r }),
+                0x7 => Some(Instruction::SubNRegV{ r, f }), // Borrowable
+                0xE => Some(Instruction::ShlRegV{ r }),
+                _ => None, 
             }
         },
-        0x0A => Some(Instruction::SetRegL(((r as u16) << 8) + bytes[1] as u16)),
-        0x0C => Some(Instruction::RndAnd{ r, val }),
-        0x0D => {
+        0x9 => Some(Instruction::SkipRegNeq{ r, f: bytes[1] >> 4 }),
+        0xA => Some(Instruction::SetRegL(get_12bit_from(bytes))),
+        0xB => Some(Instruction::JmpAddrOffReg0(get_12bit_from(bytes))),
+        0xC => Some(Instruction::RndAnd{ r, val }),
+        0xD => {
             let rx = r;
             let ry = bytes[1] >> 4;
             Some(Instruction::DispSpr{ rp: (rx, ry), n: bytes[1] & 0x0F })
         },
+        0xE => {
+            None
+        },
+        0xF => {
+            match bytes[1] {
+                0x1E => Some(Instruction::AddRegL{ r }),
+                0x55 => Some(Instruction::MemDump{ endr: r }),
+                0x65 => Some(Instruction::MemRead{ endr: r }),
+                _ => None,
+            }
+        }
         _ => None,
     }
 }
