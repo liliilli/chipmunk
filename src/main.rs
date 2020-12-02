@@ -9,6 +9,7 @@ use engine::isa::{parse_instruction, to_bitfield_string};
 use engine::register::{Registers};
 use engine::memory::{Memory};
 use engine::screen::{Screen, DrawMessage, PixelState};
+use engine::keypad::Keypad;
 
 extern crate pancurses;
 use pancurses::{initscr, endwin, Input, noecho, resize_term, beep};
@@ -105,6 +106,9 @@ fn main() {
     let mut screen = Screen::new();
     let block_str = String::from_utf16(&[FULL_BLOCK_CHAR]).unwrap();
 
+    let mut keypad = Keypad::new();
+    keypad.reset_all();
+
     // Set ncurse window (GUI)
     let window = initscr();
     resize_term(32, 64);
@@ -117,7 +121,7 @@ fn main() {
     loop {
         // Input
         match window.getch() {
-            //Some(Input::Character(_)) => (),
+            Some(Input::Character(chr)) => { keypad.set_press(chr); () },
             //Some(input) => { window.addstr(&format!("{:?}", input)); },
             Some(Input::KeyDC) => break,
             _ => (),
@@ -174,6 +178,9 @@ fn main() {
                 TimerSideEffect::None => (),
                 TimerSideEffect::Beep => { beep(); () }
             }
+
+            // Terminate local frame states.
+            keypad.reset_all();
         } else { 
             // Failure. Abort program.
             println!("Register dump : {}", registers);
