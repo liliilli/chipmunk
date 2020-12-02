@@ -15,14 +15,22 @@ pub enum SideEffect {
     MemRead{ count: u8, l: u16 },           //
 }
 
+/// Provides the side effect from timer registers update procedure.
+pub enum TimerSideEffect {
+    /// Do nothing.
+    None,   
+    /// Beep one frame.
+    Beep,   
+}
+
 pub struct Registers {
     g: [u8; GENERAL_REGISTERS_CNT], // General purpose registers
     sl: u16,                        // Memory address register from SL.
     vf: bool,                       // Flag instruction register (carry & borrow, collision).
     pc: u16,                        // Program counter register.
     spst: Vec<u16>,                 // Stack pointer stack.
-    dt: u16,                        // Delay timer register.
-    st: u16,                        // Sound timer register.
+    dt: u8,                         // Delay timer register.
+    st: u8,                         // Sound timer register.
 }
 
 impl Registers {
@@ -159,6 +167,18 @@ impl Registers {
                 let py = self.g[rp.1 as usize];
                 (1, Some(SideEffect::Draw{pos: (px, py), n, l: self.sl}))
             },
+            Inst::SetDelayToReg{ r } => { // 0xFx07
+                self.g[r as usize] = self.dt;
+                (1, None)
+            },
+            Inst::SetDelayFromReg{ r } => { // 0xFx15
+                self.dt = self.g[r as usize];
+                (1, None)
+            },
+            Inst::SetSoundFromReg{ r } => { // 0xFx18
+                self.st = self.g[r as usize];
+                (1, None)
+            },
             Inst::AddRegL{ r } => { // 0xFx1E
                 self.sl += self.g[r as usize] as u16;
                 (1, None)
@@ -179,6 +199,21 @@ impl Registers {
     pub fn store_from_v0(&mut self, values: &[u8]) {
         for (idx, &val) in values.iter().enumerate() {
             self.g[idx] = val;
+        }
+    }
+
+    /// Update timer registers.
+    pub fn update_timers(&mut self) -> TimerSideEffect {
+        if self.dt > 0 {
+            self.dt -= 1;
+        }
+
+        // If sound timer register is not 0, signal beep to device.
+        if self.st > 0 { 
+            self.st -= 1;
+            TimerSideEffect::Beep
+        } else {
+            TimerSideEffect::None
         }
     }
 }

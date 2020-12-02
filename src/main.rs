@@ -167,6 +167,13 @@ fn main() {
                 },
                 _ => (),
             }
+
+            // Process delay / sound timer decrasement.
+            use engine::register::TimerSideEffect;
+            match registers.update_timers() {
+                TimerSideEffect::None => (),
+                TimerSideEffect::Beep => { beep(); () }
+            }
         } else { 
             // Failure. Abort program.
             println!("Register dump : {}", registers);
