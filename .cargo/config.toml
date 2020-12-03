@@ -22,4 +22,6 @@ codegen-units = 256
 rpath = false
 
 [alias]
-run_test = ["run", "./roms/demos/Sierpinski [Sergey Naydenov, 2010].ch8"]
+run_test = ["run", "./roms/demos/Zero Demo [zeroZshadow, 2007].ch8"]
+run_game = ["run", "./roms/games/Breakout (Brix hack) [David Winter, 1997].ch8"]
+run_app = ["run", "./roms/programs/BMP Viewer - Hello (C8 example) [Hap, 2005].ch8"]
