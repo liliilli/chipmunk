@@ -33,6 +33,7 @@ pub enum Instruction {
     SetDelayFromReg{ r: u8 },       // 0xFx15 Set the delay timer to the value of register VX.
     SetSoundFromReg{ r: u8 },       // 0xFx18 Set the sound timer to the value of register VX.
     AddRegL{ r: u8 },               // 0xFx1E ADD l, Vx. l += Vx.
+    SetRegLFontAddrFromReg{ r: u8 },// 0xFx29 Set L to the memory addr from sprite value from VX.
     MemDump{ endr: u8 },            // 0xFx55 LD [l], Vx. Store [V0, Vx] value from [l, l+(x-0)].
     MemRead{ endr: u8 },            // 0xFx65 LD Vx, [l]. Read value from [l, l+(x-0)] to [V0, Vx].
 }
@@ -99,6 +100,7 @@ pub fn parse_instruction(bytes: &[u8; 2]) -> Option<Instruction> {
                 0x15 => Some(Instruction::SetDelayFromReg{ r }),
                 0x18 => Some(Instruction::SetSoundFromReg{ r }),
                 0x1E => Some(Instruction::AddRegL{ r }),
+                0x29 => Some(Instruction::SetRegLFontAddrFromReg{ r }),
                 0x55 => Some(Instruction::MemDump{ endr: r }),
                 0x65 => Some(Instruction::MemRead{ endr: r }),
                 _ => None,

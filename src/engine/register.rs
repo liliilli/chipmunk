@@ -197,6 +197,10 @@ impl Registers {
                 self.sl += self.general_register(r) as u16;
                 (1, None)
             },
+            Inst::SetRegLFontAddrFromReg{ r } => { // 0xFx29
+                self.sl = (self.general_register(r) as u16) * 10u16;
+                (1, None)
+            },
             Inst::MemDump{ endr } => { // 0xFx55
                 (1, Some(SideEffect::MemDump{ dump_vals: self.g[0..=(endr as usize)].to_vec(), l: self.sl }))
             },
