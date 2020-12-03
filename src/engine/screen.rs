@@ -39,13 +39,15 @@ impl Screen {
         let mut result = Vec::<DrawMessage>::new();
         let mut is_any_erased = false;
 
+        x %= SCREEN_WIDTH as u8;
+        y %= SCREEN_HEIGHT as u8;
+
         let origx = x;
         for byte in bytes {
             for i in (0..8).rev() {
                 if byte & (0b01 << i) != 0x00 { // XORDraw flag
                     let state = self.draw_xor((x, y));
                     is_any_erased |= state == PixelState::Erased;
-
                     result.push(DrawMessage{pos: (x, y), state});
                 } 
 
