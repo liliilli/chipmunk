@@ -26,6 +26,8 @@ pub enum Instruction {
     JmpAddrOffReg0(u16),            // 0xBnnn JP V0, addr(nnn), PC = V0 + nnn.
     RndAnd{ r: u8, val: u8 },       // 0xCxkk RND Vx as r, byte(0xkk) random byte AND kk as val.
     DispSpr{ rp: (u8, u8), n: u8 }, // 0xDxyn DRW Vx, Vy, n-byte sprite with xor from l with xor.
+    SkipKeyPressed{ r: u8 },        // 0xEx9E Skip next instruction if VX value key is pressed.
+    SkipKeyReleased{ r: u8 },       // 0xExA1 Skip next instruction if VX value key is not pressed.
     SetDelayToReg{ r: u8 },         // 0xFx07 Store the current value of the delay timer to VX.
     WaitKeyPress{ r: u8 },          // 0xFx0A Wait for key press. Pressed key value stored to VX.
     SetDelayFromReg{ r: u8 },       // 0xFx15 Set the delay timer to the value of register VX.
@@ -84,7 +86,11 @@ pub fn parse_instruction(bytes: &[u8; 2]) -> Option<Instruction> {
             Some(Instruction::DispSpr{ rp: (rx, ry), n: bytes[1] & 0x0F })
         },
         0xE => {
-            None
+            match bytes[1] {
+                0x9E => Some(Instruction::SkipKeyPressed{ r }),
+                0xA1 => Some(Instruction::SkipKeyReleased{ r }),
+                _ => None,
+            }
         },
         0xF => {
             match bytes[1] {

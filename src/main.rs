@@ -174,7 +174,20 @@ fn main() {
                         registers.store_from_v0(&memory.get_data_bytes(l as usize, count as usize));
                     },
                     Some(SideEffect::WaitKeyPress{ r }) => {
+                        // Let machine wait for new key press.
                         machine_state = MachineState::WaitKeyPress{ r };
+                    },
+                    Some(SideEffect::CheckKeyPressed{ key }) => {
+                        match keypad.check_press(key) {
+                            true => registers.increase_pc(2),
+                            false => registers.increase_pc(1),
+                        }
+                    },
+                    Some(SideEffect::CheckKeyReleased{ key }) => {
+                        match keypad.check_press(key) {
+                            false => registers.increase_pc(2),
+                            true => registers.increase_pc(1),
+                        }
                     },
                     None => (),
                 }
@@ -185,7 +198,7 @@ fn main() {
             }
         }
 
-        // Process delay / sound timer decrasement.
+        // Process delay / sound timer decreasement.
         // Unlike instruction parsing and update, timer must be processed independently.
         // Even machine state is being waited for key input, timer will be processed.
         use engine::register::TimerSideEffect;

@@ -14,6 +14,8 @@ pub enum SideEffect {
     MemDump{ dump_vals: Vec<u8>, l: u16 },  //
     MemRead{ count: u8, l: u16 },           //
     WaitKeyPress{ r: u8 },                  // Machine should until new key press.
+    CheckKeyPressed{ key: u8 },             // Check whether key is pressed (true), or not (false).
+    CheckKeyReleased{ key: u8 },            // Check whether key is pressed (false), or not (true).
 }
 
 /// Provides the side effect from timer registers update procedure.
@@ -53,7 +55,7 @@ impl Registers {
         self.pc = new_pc;
     }
 
-    fn increase_pc(&mut self, inst_count: u16) {
+    pub fn increase_pc(&mut self, inst_count: u16) {
         self.pc += inst_count << 1;
     }
 
@@ -167,6 +169,16 @@ impl Registers {
                 let px = self.g[rp.0 as usize];
                 let py = self.g[rp.1 as usize];
                 (1, Some(SideEffect::Draw{pos: (px, py), n, l: self.sl}))
+            },
+            Inst::SkipKeyPressed{ r } => { // 0xEx9E
+                // We have to decide how to proceed program counter
+                // checking key is pressed or not, so leave it not to proceed pc.
+                (0, Some(SideEffect::CheckKeyPressed{ key: self.g[r as usize] }))
+            },
+            Inst::SkipKeyReleased{ r } => { 
+                // We have to decide how to proceed program counter
+                // checking key is pressed or not, so leave it not to proceed pc.
+                (0, Some(SideEffect::CheckKeyReleased{ key: self.g[r as usize] }))
             },
             Inst::SetDelayToReg{ r } => { // 0xFx07
                 self.g[r as usize] = self.dt;

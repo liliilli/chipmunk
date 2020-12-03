@@ -50,4 +50,14 @@ impl Keypad {
             _ => None,
         }
     }
+
+    /// Check whether given key is pressed or not.
+    /// If key is pressed, return true. Otherwise, return false.
+    /// 
+    /// If invalid key index that is larger than 0x0F is inputed, 
+    /// program will be halted.
+    pub fn check_press(&self, key: u8) -> bool {
+        assert!(key <= 0xFu8, "");
+        self.keypad[key as usize]
+    }
 }
