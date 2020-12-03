@@ -13,6 +13,7 @@ pub enum SideEffect {
     ClearDisplay,                           // 
     MemDump{ dump_vals: Vec<u8>, l: u16 },  //
     MemRead{ count: u8, l: u16 },           //
+    WaitKeyPress{ r: u8 },                  // Machine should until new key press.
 }
 
 /// Provides the side effect from timer registers update procedure.
@@ -171,6 +172,7 @@ impl Registers {
                 self.g[r as usize] = self.dt;
                 (1, None)
             },
+            Inst::WaitKeyPress{ r } => (1, Some(SideEffect::WaitKeyPress{ r })), // 0xFx0A
             Inst::SetDelayFromReg{ r } => { // 0xFx15
                 self.dt = self.g[r as usize];
                 (1, None)
@@ -215,6 +217,15 @@ impl Registers {
         } else {
             TimerSideEffect::None
         }
+    }
+
+    // Update new value into general register.
+    pub fn update_general_register(&mut self, r: u8, value: u8) {
+        if r >= 0x0Fu8 {
+            return;
+        } 
+
+        self.g[r as usize] = value;
     }
 }
 

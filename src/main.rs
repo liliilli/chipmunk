@@ -2,7 +2,6 @@ use std::env;
 use std::time;
 use std::io::{Read};
 use std::fs;
-use std::mem;
 
 mod engine;
 use engine::isa::{parse_instruction, to_bitfield_string};
@@ -10,6 +9,7 @@ use engine::register::{Registers};
 use engine::memory::{Memory};
 use engine::screen::{Screen, DrawMessage, PixelState};
 use engine::keypad::Keypad;
+use engine::state::MachineState;
 
 extern crate pancurses;
 use pancurses::{initscr, endwin, Input, noecho, resize_term, beep};
@@ -94,20 +94,12 @@ fn main() {
         }
     };
 
-    // Construct memory (4KiB)
-    // Verbose? Check memory state.
+    // Set devices of CHIP-8 simulator.
     let mut memory = Memory::new(&file_path).unwrap();
-    //memory.print_memory_dump();
-
-    // Set registers
     let mut registers = Registers::new();
-
-    // Set screen buffer
     let mut screen = Screen::new();
-    let block_str = String::from_utf16(&[FULL_BLOCK_CHAR]).unwrap();
-
-    let mut keypad = Keypad::new();
-    keypad.reset_all();
+    let mut keypad = Keypad::new(); // Already reseted.
+    let mut machine_state = MachineState::Normal;
 
     // Set ncurse window (GUI)
     let window = initscr();
@@ -115,78 +107,97 @@ fn main() {
     window.keypad(true);
     window.refresh();
     window.nodelay(true);
-    //window.printw(String::from_utf16(&[HALF_BLOCK_CHAR, FULL_BLOCK_CHAR]).unwrap());
     noecho();
 
+    // Create block string for expressing pixel drawing into ncurse display.
+    let block_str = String::from_utf16(&[FULL_BLOCK_CHAR]).unwrap();
+
+    // Start one frame.
     loop {
-        // Input
-        match window.getch() {
-            Some(Input::Character(chr)) => { keypad.set_press(chr); () },
-            //Some(input) => { window.addstr(&format!("{:?}", input)); },
-            Some(Input::KeyDC) => break,
-            _ => (),
+        // Input keypad.
+        let input_keyval = match window.getch() {
+            Some(Input::Character(chr)) => keypad.set_press(chr),
+            Some(Input::KeyExit) => break,
+            _ => None,
+        };
+
+        // If machine state is waiting for key press, and some valueable key is pressed,
+        // Change machine state and process side-effect.
+        if let MachineState::WaitKeyPress{ r } = machine_state {
+            if let Some(keyval) = input_keyval {
+                registers.update_general_register(r, keyval);
+                machine_state = MachineState::Normal;
+            }
         }
 
-        // Update 
-        if let Some(instruction) = memory.parse_instruction(registers.get_pc()) {
-            use engine::register::SideEffect;
+        if machine_state == MachineState::Normal {
+            // Parse instruction and process.
+            if let Some(instruction) = memory.parse_instruction(registers.get_pc()) {
+                use engine::register::SideEffect;
 
-            // Update register with instruction.
-            let side_effect = registers.update_registers(instruction);
+                // Update register with instruction.
+                let side_effect = registers.update_registers(instruction);
 
-            // Process consequential side effects.
-            match side_effect {
-                Some(SideEffect::ClearDisplay) => {
-                    screen.clear();
-                    window.clear();
-                },
-                Some(SideEffect::Draw{ pos, n, l: addr }) => {
-                    // Update screen buffer and get dirty pixels to update window buffer.
-                    // New carry flag value will be returned.
-                    let (dirty_pixels, is_any_erased) = screen.draw(
-                        pos, 
-                        &memory.get_data_bytes(addr as usize, n as usize)
-                    );
+                // Process consequential side effects.
+                match side_effect {
+                    Some(SideEffect::ClearDisplay) => {
+                        screen.clear();
+                        window.clear();
+                    },
+                    Some(SideEffect::Draw{ pos, n, l: addr }) => {
+                        // Update screen buffer and get dirty pixels to update window buffer.
+                        // New carry flag value will be returned.
+                        let (dirty_pixels, is_any_erased) = screen.draw(
+                            pos, 
+                            &memory.get_data_bytes(addr as usize, n as usize)
+                        );
 
-                    // Update VF (carry & borrow flag)
-                    registers.update_vf(is_any_erased);
+                        // Update VF (carry & borrow flag)
+                        registers.update_vf(is_any_erased);
 
-                    // Update window buffer.
-                    for DrawMessage { pos: (x, y), state } in &dirty_pixels {
-                        window.mv(*y as i32, *x as i32);
-                        match state {
-                            PixelState::Erased => { window.delch(); () },
-                            PixelState::Drawn => { window.printw(&block_str); () },
+                        // Update window buffer.
+                        for DrawMessage { pos: (x, y), state } in &dirty_pixels {
+                            window.mv(*y as i32, *x as i32);
+                            match state {
+                                PixelState::Erased => { window.delch(); () },
+                                PixelState::Drawn => { window.printw(&block_str); () },
+                            }
                         }
-                    }
-                },
-                Some(SideEffect::MemDump{ dump_vals, l }) => {
-                    // 
-                    memory.store_from(&dump_vals, l);
-                },
-                Some(SideEffect::MemRead{ count, l }) => {
-                    // First, get values from memory [l, l + count)
-                    // Second, store from v0 to v0 + (count - 1).
-                    registers.store_from_v0(&memory.get_data_bytes(l as usize, count as usize));
-                },
-                _ => (),
+                    },
+                    Some(SideEffect::MemDump{ dump_vals, l }) => {
+                        // 
+                        memory.store_from(&dump_vals, l);
+                    },
+                    Some(SideEffect::MemRead{ count, l }) => {
+                        // First, get values from memory [l, l + count)
+                        // Second, store from v0 to v0 + (count - 1).
+                        registers.store_from_v0(&memory.get_data_bytes(l as usize, count as usize));
+                    },
+                    Some(SideEffect::WaitKeyPress{ r }) => {
+                        machine_state = MachineState::WaitKeyPress{ r };
+                    },
+                    None => (),
+                }
+            } else { 
+                // Failure. Abort program.
+                println!("Register dump : {}", registers);
+                break;
             }
-
-            // Process delay / sound timer decrasement.
-            use engine::register::TimerSideEffect;
-            match registers.update_timers() {
-                TimerSideEffect::None => (),
-                TimerSideEffect::Beep => { beep(); () }
-            }
-
-            // Terminate local frame states.
-            keypad.reset_all();
-        } else { 
-            // Failure. Abort program.
-            println!("Register dump : {}", registers);
-            break;
         }
-    }
+
+        // Process delay / sound timer decrasement.
+        // Unlike instruction parsing and update, timer must be processed independently.
+        // Even machine state is being waited for key input, timer will be processed.
+        use engine::register::TimerSideEffect;
+        match registers.update_timers() {
+            TimerSideEffect::None => (),
+            TimerSideEffect::Beep => { beep(); () }
+        }
+
+        // Terminate local frame states.
+        // Keypad reset should also be processed independently.
+        keypad.reset_all();
+    }   // End of one frame.
 
     endwin();
 }

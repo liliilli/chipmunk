@@ -27,6 +27,7 @@ pub enum Instruction {
     RndAnd{ r: u8, val: u8 },       // 0xCxkk RND Vx as r, byte(0xkk) random byte AND kk as val.
     DispSpr{ rp: (u8, u8), n: u8 }, // 0xDxyn DRW Vx, Vy, n-byte sprite with xor from l with xor.
     SetDelayToReg{ r: u8 },         // 0xFx07 Store the current value of the delay timer to VX.
+    WaitKeyPress{ r: u8 },          // 0xFx0A Wait for key press. Pressed key value stored to VX.
     SetDelayFromReg{ r: u8 },       // 0xFx15 Set the delay timer to the value of register VX.
     SetSoundFromReg{ r: u8 },       // 0xFx18 Set the sound timer to the value of register VX.
     AddRegL{ r: u8 },               // 0xFx1E ADD l, Vx. l += Vx.
@@ -88,6 +89,7 @@ pub fn parse_instruction(bytes: &[u8; 2]) -> Option<Instruction> {
         0xF => {
             match bytes[1] {
                 0x07 => Some(Instruction::SetDelayToReg{ r }),
+                0x0A => Some(Instruction::WaitKeyPress{ r }),
                 0x15 => Some(Instruction::SetDelayFromReg{ r }),
                 0x18 => Some(Instruction::SetSoundFromReg{ r }),
                 0x1E => Some(Instruction::AddRegL{ r }),
