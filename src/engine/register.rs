@@ -81,7 +81,7 @@ impl Registers {
                 (0, None)
             },
             Inst::JmpAddrOffReg0(new_pc) => { // 0xBnnn
-                self.set_pc(self.g[0] as u16 + new_pc);
+                self.set_pc((self.general_register(0) as u16) + new_pc);
                 (0, None)
             },
             Inst::CallSub(new_pc) => { // 0x2nnn
@@ -90,15 +90,15 @@ impl Registers {
                 (0, None)
             },
             Inst::SkipEq{ r, val } => { // 0x3xkk
-                let pc_inc = if self.g[r as usize] == val { 2 } else { 1 };
+                let pc_inc = if self.general_register(r) == val { 2 } else { 1 };
                 (pc_inc, None)
             },
             Inst::SkipNeq{ r, val } => { // 0x4xkk
-                let pc_inc = if self.g[r as usize] != val { 2 } else { 1 };
+                let pc_inc = if self.general_register(r) != val { 2 } else { 1 };
                 (pc_inc, None)
             },
             Inst::SkipRegEq{ r, f } => {
-                let matched = self.g[r as usize] == self.g[f as usize];
+                let matched = self.general_register(r) == self.general_register(f);
                 (if matched { 2 } else { 1 }, None)
             },
             Inst::SetByte{ r, val } => { // 0x6xkk
@@ -110,51 +110,51 @@ impl Registers {
                 (1, None)
             },
             Inst::SetRegV{ r, f } => { // 0x8xy0
-                self.g[r as usize] = self.g[f as usize];
+                self.g[r as usize] = self.general_register(f);
                 (1, None)
             },
             Inst::OrRegV{ r, f } => { // 0x8xy1
-                self.g[r as usize] |= self.g[f as usize];
+                self.g[r as usize] |= self.general_register(f);
                 (1, None)
             },
             Inst::AndRegV{ r, f } => { // 0x8xy2
-                self.g[r as usize] &= self.g[f as usize];
+                self.g[r as usize] &= self.general_register(f);
                 (1, None)
             },
             Inst::XorRegV{ r, f } => { // 0x8xy3
-                self.g[r as usize] ^= self.g[f as usize];
+                self.g[r as usize] ^= self.general_register(f);
                 (1, None)
             },
             Inst::AddRegV{ r, f } => { // 0x8xy4
-                let (val, is_carry) = self.g[r as usize].overflowing_add(self.g[f as usize]);
+                let (val, is_carry) = self.general_register(r).overflowing_add(self.general_register(f));
                 self.g[r as usize] = val;
                 self.update_vf(is_carry);
                 (1, None)
             },
             Inst::SubRegV{ r, f } => { // 0x8xy5
-                let (val, is_borrow) = self.g[r as usize].overflowing_sub(self.g[f as usize]);
+                let (val, is_borrow) = self.general_register(r).overflowing_sub(self.general_register(f));
                 self.g[r as usize] = val;
                 self.update_vf(!is_borrow); // in CHIP-8, Vx > Vy, update to 1 as not borrowed.
                 (1, None)
             },
             Inst::ShrRegV{ r } => { // 0x8x_6
-                self.update_vf((self.g[r as usize] & 0b01) == 0b01);
+                self.update_vf((self.general_register(r) & 0b01) == 0b01);
                 self.g[r as usize] >>= 1;
                 (1, None)
             },
             Inst::SubNRegV{ r, f } => { // 0x8xy7
-                let (val, is_borrow) = self.g[f as usize].overflowing_sub(self.g[r as usize]);
+                let (val, is_borrow) = self.general_register(f).overflowing_sub(self.general_register(r));
                 self.g[r as usize] = val;
                 self.update_vf(!is_borrow); // in CHIP-8, Vy > Vx, update to 1 as not borrowed.
                 (1, None)
             },
             Inst::ShlRegV{ r } => { // 0x8x_E
-                self.update_vf((self.g[r as usize] & 0x80) == 0x80);
+                self.update_vf((self.general_register(r) & 0x80) == 0x80);
                 self.g[r as usize] <<= 1;
                 (1, None)
             },
             Inst::SkipRegNeq{ r, f } => {
-                let matched = self.g[r as usize] != self.g[f as usize];
+                let matched = self.general_register(r) != self.general_register(f);
                 (if matched { 2 } else { 1 }, None)
             },
             Inst::SetRegL(new_l) => { // 0xAnnn
@@ -166,19 +166,19 @@ impl Registers {
                 (1, None)
             },
             Inst::DispSpr{ rp, n } => { // 0xDxyn
-                let px = self.g[rp.0 as usize];
-                let py = self.g[rp.1 as usize];
+                let px = self.general_register(rp.0);
+                let py = self.general_register(rp.1);
                 (1, Some(SideEffect::Draw{pos: (px, py), n, l: self.sl}))
             },
             Inst::SkipKeyPressed{ r } => { // 0xEx9E
                 // We have to decide how to proceed program counter
                 // checking key is pressed or not, so leave it not to proceed pc.
-                (0, Some(SideEffect::CheckKeyPressed{ key: self.g[r as usize] }))
+                (0, Some(SideEffect::CheckKeyPressed{ key: self.general_register(r) }))
             },
             Inst::SkipKeyReleased{ r } => { 
                 // We have to decide how to proceed program counter
                 // checking key is pressed or not, so leave it not to proceed pc.
-                (0, Some(SideEffect::CheckKeyReleased{ key: self.g[r as usize] }))
+                (0, Some(SideEffect::CheckKeyReleased{ key: self.general_register(r) }))
             },
             Inst::SetDelayToReg{ r } => { // 0xFx07
                 self.g[r as usize] = self.dt;
@@ -186,19 +186,19 @@ impl Registers {
             },
             Inst::WaitKeyPress{ r } => (1, Some(SideEffect::WaitKeyPress{ r })), // 0xFx0A
             Inst::SetDelayFromReg{ r } => { // 0xFx15
-                self.dt = self.g[r as usize];
+                self.dt = self.general_register(r);
                 (1, None)
             },
             Inst::SetSoundFromReg{ r } => { // 0xFx18
-                self.st = self.g[r as usize];
+                self.st = self.general_register(r);
                 (1, None)
             },
             Inst::AddRegL{ r } => { // 0xFx1E
-                self.sl += self.g[r as usize] as u16;
+                self.sl += self.general_register(r) as u16;
                 (1, None)
             },
             Inst::MemDump{ endr } => { // 0xFx55
-                (1, Some(SideEffect::MemDump{ dump_vals: self.g[0..=endr as usize].to_vec(), l: self.sl }))
+                (1, Some(SideEffect::MemDump{ dump_vals: self.g[0..=(endr as usize)].to_vec(), l: self.sl }))
             },
             Inst::MemRead{ endr } => { // 0xFx65
                 (1, Some(SideEffect::MemRead{ count: endr + 1, l: self.sl }))
@@ -231,13 +231,19 @@ impl Registers {
         }
     }
 
-    // Update new value into general register.
+    /// Update new value into general register.
     pub fn update_general_register(&mut self, r: u8, value: u8) {
         if r >= 0x0Fu8 {
             return;
         } 
 
         self.g[r as usize] = value;
+    }
+
+    /// Get general register value. from V0 to VF.
+    /// given value `r` must be ranged in [0, F]. Otherwise, the program will be panic.
+    fn general_register(&self, r: u8) -> u8 {
+        self.g[r as usize]
     }
 }
 
