@@ -14,8 +14,6 @@ use engine::state::MachineState;
 extern crate pancurses;
 use pancurses::{initscr, endwin, Input, noecho, resize_term, beep};
 
-static FULL_BLOCK_CHAR: u16 = 0x2588;
-
 fn is_file_valid_ch8(path: &str) -> bool {
     use std::path::Path;
 
@@ -109,9 +107,6 @@ fn main() {
     window.nodelay(true);
     noecho();
 
-    // Create block string for expressing pixel drawing into ncurse display.
-    let block_str = String::from_utf16(&[FULL_BLOCK_CHAR]).unwrap();
-
     // Start one frame.
     loop {
         // Input keypad.
@@ -125,7 +120,7 @@ fn main() {
         // Change machine state and process side-effect.
         if let MachineState::WaitKeyPress{ r } = machine_state {
             if let Some(keyval) = input_keyval {
-                registers.update_general_register(r, keyval);
+                registers.set_general_register(r, keyval);
                 machine_state = MachineState::Normal;
             }
         }
@@ -157,10 +152,15 @@ fn main() {
 
                         // Update window buffer.
                         for DrawMessage { pos: (x, y), state } in &dirty_pixels {
-                            window.mv(*y as i32, *x as i32);
                             match state {
-                                PixelState::Erased => { window.delch(); () },
-                                PixelState::Drawn => { window.printw(&block_str); () },
+                                PixelState::Erased => { 
+                                    window.mvaddch(*y as i32, *x as i32, ' '); 
+                                    () 
+                                },
+                                PixelState::Drawn => { 
+                                    window.mvaddch(*y as i32, *x as i32, '\u{2588}');
+                                    () 
+                                },
                             }
                         }
                     },
