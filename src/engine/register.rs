@@ -28,8 +28,8 @@ pub enum TimerSideEffect {
 
 pub struct Registers {
     g: [u8; GENERAL_REGISTERS_CNT], // General purpose registers
+                                    // Flag instruction register (carry & borrow, collision).
     sl: u16,                        // Memory address register from SL.
-    vf: bool,                       // Flag instruction register (carry & borrow, collision).
     pc: u16,                        // Program counter register.
     spst: Vec<u16>,                 // Stack pointer stack.
     dt: u8,                         // Delay timer register.
@@ -41,7 +41,6 @@ impl Registers {
         Registers {
             g: [0; GENERAL_REGISTERS_CNT],
             sl: 0,
-            vf: false,
             pc: INIT_PROGRAM_COUNTER_VAL,
             spst: Vec::<u16>::with_capacity(STACK_POINTER_CNT),
             dt: 0,
@@ -60,7 +59,7 @@ impl Registers {
     }
 
     pub fn update_vf(&mut self, is_set: bool) {
-        self.vf = is_set;
+        self.set_general_register(0xFu8, if is_set { 1 } else { 0 });
     }
 
     pub fn update_registers(&mut self, instruction: isa::Instruction) -> Option<SideEffect> {
@@ -73,15 +72,10 @@ impl Registers {
                 assert!(self.spst.is_empty() == false);
                 let new_pc = self.spst.pop().unwrap();
                 self.set_pc(new_pc);
-                self.increase_pc(1);
-                (0, None)
+                (1, None)
             },
             Inst::JmpAddr(addr) => { // 0x1nnn
                 self.set_pc(addr);
-                (0, None)
-            },
-            Inst::JmpAddrOffReg0(new_pc) => { // 0xBnnn
-                self.set_pc((self.general_register(0) as u16) + new_pc);
                 (0, None)
             },
             Inst::CallSub(new_pc) => { // 0x2nnn
@@ -97,7 +91,7 @@ impl Registers {
                 let pc_inc = if self.general_register(r) != val { 2 } else { 1 };
                 (pc_inc, None)
             },
-            Inst::SkipRegEq{ r, f } => {
+            Inst::SkipRegEq{ r, f } => { // 0x5xkk
                 let matched = self.general_register(r) == self.general_register(f);
                 (if matched { 2 } else { 1 }, None)
             },
@@ -137,9 +131,10 @@ impl Registers {
                 self.update_vf(!is_borrow); // in CHIP-8, Vx > Vy, update to 1 as not borrowed.
                 (1, None)
             },
-            Inst::ShrRegV{ r } => { // 0x8x_6
-                self.update_vf((self.general_register(r) & 0b01) == 0b01);
-                self.g[r as usize] >>= 1;
+            Inst::ShrRegV{ r, f } => { // 0x8xy6
+                self.update_vf((self.general_register(f) & 0b01) != 0);
+                let new_value = self.general_register(f) >> 1;
+                self.set_general_register(r, new_value);
                 (1, None)
             },
             Inst::SubNRegV{ r, f } => { // 0x8xy7
@@ -148,9 +143,10 @@ impl Registers {
                 self.update_vf(!is_borrow); // in CHIP-8, Vy > Vx, update to 1 as not borrowed.
                 (1, None)
             },
-            Inst::ShlRegV{ r } => { // 0x8x_E
-                self.update_vf((self.general_register(r) & 0x80) == 0x80);
-                self.g[r as usize] <<= 1;
+            Inst::ShlRegV{ r, f } => { // 0x8x_E
+                self.update_vf((self.general_register(f) & 0x80) != 0);
+                let new_value = self.general_register(f) << 1;
+                self.set_general_register(r, new_value);
                 (1, None)
             },
             Inst::SkipRegNeq{ r, f } => {
@@ -161,8 +157,12 @@ impl Registers {
                 self.sl = new_l;
                 (1, None)
             },
+            Inst::JmpAddrOffReg0(new_pc) => { // 0xBnnn
+                self.set_pc((self.general_register(0) as u16) + new_pc);
+                (0, None)
+            },
             Inst::RndAnd{ r, val } => { // 0xCxkk
-                self.g[r as usize] = rand::random::<u8>() & val;
+                self.set_general_register(r, rand::random::<u8>() & val);
                 (1, None)
             },
             Inst::DispSpr{ rp, n } => { // 0xDxyn
@@ -181,7 +181,7 @@ impl Registers {
                 (0, Some(SideEffect::CheckKeyReleased{ key: self.general_register(r) }))
             },
             Inst::SetDelayToReg{ r } => { // 0xFx07
-                self.g[r as usize] = self.dt;
+                self.set_general_register(r, self.dt);
                 (1, None)
             },
             Inst::WaitKeyPress{ r } => (1, Some(SideEffect::WaitKeyPress{ r })), // 0xFx0A
@@ -201,7 +201,7 @@ impl Registers {
                 self.sl = (self.general_register(r) as u16) * 5u16;
                 (1, None)
             },
-            Inst::MemDumpBcdFromReg{ r } => {
+            Inst::MemDumpBcdFromReg{ r } => { // 0xFx33
                 // Convert value from register Vr into BCD code.
                 // MSB must be in L[0], LSB is L[2].
                 let bcd_code = {
@@ -212,10 +212,14 @@ impl Registers {
                 (1, Some(SideEffect::MemDump{ dump_vals: bcd_code, l: self.sl }))
             },
             Inst::MemDump{ endr } => { // 0xFx55
-                (1, Some(SideEffect::MemDump{ dump_vals: self.g[0..=(endr as usize)].to_vec(), l: self.sl }))
+                let l = self.sl;
+                self.sl += (endr as u16) + 1u16;
+                (1, Some(SideEffect::MemDump{ dump_vals: self.g[0..=(endr as usize)].to_vec(), l }))
             },
             Inst::MemRead{ endr } => { // 0xFx65
-                (1, Some(SideEffect::MemRead{ count: endr + 1, l: self.sl }))
+                let l = self.sl;
+                self.sl += (endr as u16) + 1u16;
+                (1, Some(SideEffect::MemRead{ count: endr + 1, l }))
             }
         };
 
@@ -245,12 +249,9 @@ impl Registers {
         }
     }
 
-    /// Update new value into general register.
-    pub fn update_general_register(&mut self, r: u8, value: u8) {
-        if r >= 0x0Fu8 {
-            return;
-        } 
-
+    /// Set new value into general register.
+    pub fn set_general_register(&mut self, r: u8, value: u8) {
+        if r > 0x0Fu8 { return; } 
         self.g[r as usize] = value;
     }
 
@@ -272,8 +273,8 @@ impl fmt::Display for Registers {
             self.g[8], self.g[9], self.g[10], self.g[11], 
             self.g[12], self.g[13], self.g[14], self.g[15]);
         let others = format!(
-            "L:{:4},PC:{:4},DT:{:4},ST:{:4},VF:{}",
-            self.sl, self.pc, self.dt, self.st, self.vf);
+            "L:{:4},PC:{:4},DT:{:4},ST:{:4}",
+            self.sl, self.pc, self.dt, self.st);
 
         write!(f, "{}, {}\n{}", general_registers0, general_registers1, others)
     }
