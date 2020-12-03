@@ -106,7 +106,7 @@ impl Registers {
                 (1, None)
             },
             Inst::AddByte{ r, val } => { // 0x7xkk
-                self.g[r as usize] += val;
+                self.g[r as usize] = self.general_register(r).overflowing_add(val).0;
                 (1, None)
             },
             Inst::SetRegV{ r, f } => { // 0x8xy0
@@ -198,8 +198,18 @@ impl Registers {
                 (1, None)
             },
             Inst::SetRegLFontAddrFromReg{ r } => { // 0xFx29
-                self.sl = (self.general_register(r) as u16) * 10u16;
+                self.sl = (self.general_register(r) as u16) * 5u16;
                 (1, None)
+            },
+            Inst::MemDumpBcdFromReg{ r } => {
+                // Convert value from register Vr into BCD code.
+                // MSB must be in L[0], LSB is L[2].
+                let bcd_code = {
+                    let value = self.general_register(r);
+                    let quotient = value / 10;
+                    vec![quotient / 10, quotient % 10, value % 10]
+                };
+                (1, Some(SideEffect::MemDump{ dump_vals: bcd_code, l: self.sl }))
             },
             Inst::MemDump{ endr } => { // 0xFx55
                 (1, Some(SideEffect::MemDump{ dump_vals: self.g[0..=(endr as usize)].to_vec(), l: self.sl }))
