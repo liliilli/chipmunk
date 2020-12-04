@@ -1,5 +1,5 @@
 [package]
-name = "sh_chip8"
+name = "chipmunk"
 version = "0.1.0"
 authors = ["Jongmin Yun <jmyundev@gmail.com>"]
 edition = "2018"
