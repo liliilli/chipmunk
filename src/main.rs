@@ -1,84 +1,20 @@
 use std::env;
 use std::time;
-use std::io::{Read};
-use std::fs;
 
 mod engine;
-use engine::isa::{parse_instruction, to_bitfield_string};
 use engine::register::{Registers};
 use engine::memory::{Memory};
 use engine::screen::{Screen, DrawMessage, PixelState};
 use engine::keypad::Keypad;
 use engine::state::MachineState;
+use engine::check::get_ch8_file_path;
+use engine::device;
 
 extern crate pancurses;
-use pancurses::{initscr, endwin, Input, noecho, resize_term, beep};
+use pancurses::beep;
 
-fn is_file_valid_ch8(path: &str) -> bool {
-    use std::path::Path;
-
-    let path = Path::new(&path);
-    if !(path.exists() && path.is_file()) {
-        // If file is not exist, and not file, just return false.
-        return false;
-    } 
-
-    // Read file and check validation.
-    let file = {
-        if let Ok(file) = fs::File::open(path) {
-            file
-        } else {
-            return false;
-        }
-    };
-
-    enum InstructionState { Left, Right, }
-    let mut instruction: [u8; 2] = [0, 0];
-    let mut parse_state = InstructionState::Left;
-    let mut address = 0x200;
-    for byte in file.bytes() {
-        // Error check
-        if let Err(_) = byte { return false; }
-
-        // Parse
-        let byte = byte.unwrap();
-        let (next_state, check_instruction) = match parse_state {
-        InstructionState::Left => { instruction[0] = byte; (InstructionState::Right, false) },
-        InstructionState::Right => { instruction[1] = byte; (InstructionState::Left, true) }
-        };
-
-        // Check instruction
-        if check_instruction {
-            println!(
-                "{:04} : 0x{:02x}{:02x} :: {} :: {:?}", 
-                address, instruction[0], instruction[1], 
-                to_bitfield_string(&instruction, '1', '0'),
-                parse_instruction(&instruction)
-            );
-            address += 0x02; // 2 Bytes
-        }
-
-        // Update flag.
-        parse_state = next_state;
-    }
-
-    true
-}
-
-fn get_ch8_file_path(args: &mut env::Args) -> Result<String, String> {
-    // Check given arguments are valid.
-    if args.len() != 2 {
-        return Err(format!("Valid usage : ./{} {}", "sh_chip8.exe", "valid ch8 file path"));
-    } 
-
-    // Check file is exist, and valid.
-    let file_path: String = args.nth(1).unwrap();
-    if is_file_valid_ch8(&file_path) == true {
-        Ok(file_path)
-    } else {
-        return Err(format!("Valid usage : ./{} {}", "sh_chip8.exe", "valid ch8 file path"))
-    }
-}
+extern crate crossterm;
+use crossterm::event::{poll, read, Event, KeyEvent, KeyCode};
 
 fn main() {
     // Get file path.
@@ -99,21 +35,29 @@ fn main() {
     let mut keypad = Keypad::new(); // Already reseted.
     let mut machine_state = MachineState::Normal;
 
-    // Set ncurse window (GUI)
-    let window = initscr();
-    resize_term(32, 64);
-    window.keypad(true);
-    window.refresh();
-    window.nodelay(true);
-    noecho();
+    // Set ncurse window (Render & keyboard input)
+    let device = device::Device::new();
+    if let Err(err) = device {
+        println!("Error : {:?}", err);
+        return;
+    }
+    let mut device = device.unwrap();
+    let _ = device.clear();
 
     // Start one frame.
     loop {
-        // Input keypad.
-        let input_keyval = match window.getch() {
-            Some(Input::Character(chr)) => keypad.set_press(chr),
-            Some(Input::KeyExit) => break,
-            _ => None,
+        let input_keyval = match poll(time::Duration::from_secs(0)) {
+            Ok(true) => {
+                // calling read() will be unblocked because some input is already polled.
+                match read().unwrap() {
+                    // If readen value has KeyCode::Char()
+                    Event::Key(KeyEvent{ code: KeyCode::Char(val), modifiers: _ }) =>
+                        keypad.set_press(val),
+                    _ => None,
+                }
+            },
+            Ok(false) => None,
+            _ => break,
         };
 
         // If machine state is waiting for key press, and some valueable key is pressed,
@@ -137,7 +81,7 @@ fn main() {
                 match side_effect {
                     Some(SideEffect::ClearDisplay) => {
                         screen.clear();
-                        window.clear();
+                        let _ = device.clear();
                     },
                     Some(SideEffect::Draw{ pos, n, l: addr }) => {
                         // Update screen buffer and get dirty pixels to update window buffer.
@@ -151,14 +95,14 @@ fn main() {
                         registers.update_vf(is_any_erased);
 
                         // Update window buffer.
-                        for DrawMessage { pos: (x, y), state } in &dirty_pixels {
+                        for DrawMessage { pos, state } in &dirty_pixels {
                             match state {
                                 PixelState::Erased => { 
-                                    window.mvaddch(*y as i32, *x as i32, ' '); 
+                                    let _ = device.mv_print(*pos, " "); 
                                     () 
                                 },
                                 PixelState::Drawn => { 
-                                    window.mvaddch(*y as i32, *x as i32, '\u{2588}');
+                                    let _ = device.mv_print(*pos, "\u{2588}"); 
                                     () 
                                 },
                             }
@@ -211,6 +155,4 @@ fn main() {
         // Keypad reset should also be processed independently.
         keypad.reset_all();
     }   // End of one frame.
-
-    endwin();
 }

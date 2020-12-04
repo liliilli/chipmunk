@@ -8,4 +8,5 @@ edition = "2018"
 
 [dependencies]
 pancurses = "0.16.1"
+crossterm = "0.18.2"
 rand = "0.7.3"
