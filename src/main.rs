@@ -44,8 +44,20 @@ fn main() {
     let mut device = device.unwrap();
     let _ = device.clear();
 
+    let duration = time::Duration::from_secs_f64(1.0 / 1_760_000.0);
+    let mut prev_time = time::Instant::now();
+
     // Start one frame.
     loop {
+        let now_time = time::Instant::now();
+        let elapsed = now_time.duration_since(prev_time);
+        if elapsed < duration {
+            continue;
+        }
+        else {
+            prev_time = now_time;
+        }
+
         let input_keyval = match poll(time::Duration::from_secs(0)) {
             Ok(true) => {
                 // calling read() will be unblocked because some input is already polled.
