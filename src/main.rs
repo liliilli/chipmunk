@@ -50,9 +50,12 @@ fn main() {
             Ok(true) => {
                 // calling read() will be unblocked because some input is already polled.
                 match read().unwrap() {
-                    // If readen value has KeyCode::Char()
-                    Event::Key(KeyEvent{ code: KeyCode::Char(val), modifiers: _ }) =>
-                        keypad.set_press(val),
+                    // If read value has KeyCode::Char(), try to update keypad state.
+                    Event::Key(KeyEvent{ code: KeyCode::Char(val), modifiers: _ }) => {
+                        keypad.set_press(val)
+                    },
+                    // If Escape key is pressed, terminate program.
+                    Event::Key(KeyEvent{ code: KeyCode::Esc, modifiers: _ }) => break,
                     _ => None,
                 }
             },
