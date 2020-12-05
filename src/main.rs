@@ -9,6 +9,7 @@ use engine::keypad::Keypad;
 use engine::state::MachineState;
 use engine::check::get_ch8_file_path;
 use engine::device;
+use engine::timer;
 
 extern crate pancurses;
 use pancurses::beep;
@@ -34,6 +35,8 @@ fn main() {
     let mut screen = Screen::new();
     let mut keypad = Keypad::new(); // Already reseted.
     let mut machine_state = MachineState::Normal;
+    let mut clock = timer::Timer::from_second(1.0 / 1_760_000.0);
+    let mut timer_60hz = timer::Timer::from_second(1.0 / 60.0);
 
     // Set ncurse window (Render & keyboard input)
     let device = device::Device::new();
@@ -44,18 +47,10 @@ fn main() {
     let mut device = device.unwrap();
     let _ = device.clear();
 
-    let duration = time::Duration::from_secs_f64(1.0 / 1_760_000.0);
-    let mut prev_time = time::Instant::now();
-
     // Start one frame.
     loop {
-        let now_time = time::Instant::now();
-        let elapsed = now_time.duration_since(prev_time);
-        if elapsed < duration {
+        if clock.tick() == false {
             continue;
-        }
-        else {
-            prev_time = now_time;
         }
 
         let input_keyval = match poll(time::Duration::from_secs(0)) {
@@ -160,10 +155,12 @@ fn main() {
         // Process delay / sound timer decreasement.
         // Unlike instruction parsing and update, timer must be processed independently.
         // Even machine state is being waited for key input, timer will be processed.
-        use engine::register::TimerSideEffect;
-        match registers.update_timers() {
-            TimerSideEffect::None => (),
-            TimerSideEffect::Beep => { beep(); () }
+        if timer_60hz.tick() == true {
+            use engine::register::TimerSideEffect;
+            match registers.update_timers() {
+                TimerSideEffect::None => (),
+                TimerSideEffect::Beep => { beep(); () }
+            }
         }
 
         // Terminate local frame states.

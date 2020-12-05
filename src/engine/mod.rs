@@ -6,3 +6,4 @@ pub mod keypad;
 pub mod state;
 pub mod check;
 pub mod device;
+pub mod timer;
