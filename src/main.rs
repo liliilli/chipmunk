@@ -11,9 +11,6 @@ use engine::check::get_ch8_file_path;
 use engine::device;
 use engine::timer;
 
-extern crate pancurses;
-use pancurses::beep;
-
 extern crate crossterm;
 use crossterm::event::{poll, read, Event, KeyEvent, KeyCode};
 
@@ -159,7 +156,7 @@ fn main() {
             use engine::register::TimerSideEffect;
             match registers.update_timers() {
                 TimerSideEffect::None => (),
-                TimerSideEffect::Beep => { beep(); () }
+                TimerSideEffect::Beep => (),
             }
         }
 
