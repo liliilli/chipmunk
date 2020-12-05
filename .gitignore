@@ -14,8 +14,8 @@ Cargo.lock
 /roms/
 
 ### vscode ###
-.vs/*
-.vscode/*
+/.vs/
+/.vscode/
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json

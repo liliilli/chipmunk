@@ -8,10 +8,8 @@
             "name": "(Windows) Launch",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/target/debug/sh_chip8.exe",
-            "args": [
-                "./roms/demos/Particle Demo [zeroZshadow, 2008].ch8"
-            ],
+            "program": "${workspaceFolder}/target/debug/chipmunk.exe",
+            "args": [ ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
