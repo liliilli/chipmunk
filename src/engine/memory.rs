@@ -63,6 +63,7 @@ impl Memory {
     }
 
     ///
+    #[allow(dead_code)]
     pub fn print_memory_dump(&self) {
         enum InstructionState { Left, Right, }
         let mut instruction: [u8; 2] = [0, 0];
